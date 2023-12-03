@@ -49,9 +49,3 @@ grainsizes_prep["gs_phi"] = diameter_2_krumbein_phi(
 grainsizes_clr = gs_simplex_2_rplus(dataframe=grainsizes_prep, depth_colum="depth")
 
 grainsizes_summarize = mean_curves_clr(dataframe=grainsizes_clr, depth_colum="depth")
-<<<<<<< HEAD
-```
-=======
-```
-
->>>>>>> 5007ccf78609792ba8c1f4c528f28a414f5783b6
