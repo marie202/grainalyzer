@@ -1,63 +1,63 @@
-def extract_row(filepath):
+import csv
+import glob
+import numpy as np
+import pandas as pd
+import composition_stats as comp
+
+
+def extract_row(filepath: str, encoding: str = "windows-1252") -> int:
     """
-    `extract_row()` to find out how many rows to skip (we only want to keep the table given at the end of the csv)
-    
+    `extract_row()` to find out how many rows to skip (we only want to keep
+    the table given at the end of the csv)
+
     filepath : filepath to a csv file, e.g. 'Data/<your_filename>.csv'
                 make sure file is in Laserscanner format
-                we perform a string match here, should make it more robust for different structures
+                we perform a string match here, should make it more
+                robust for different structures
     """
-    import csv
-
-    with open(filepath, mode="r") as f:
+    with open(filepath, mode="r", encoding=encoding) as f:
         reader = csv.reader(f)
         for num, row in enumerate(reader):
-            if len(row) > 0:  # some rows are empty, which causes error
-                if "Kanaldurchmesser" in row[0]:
-                    skiprows = num - 1
-                    return skiprows
+            if len(row) > 0 and "Kanaldurchmesser" in row[0]:
+                return num - 1
+
+    raise RuntimeError(
+        f"Failed to parse {filepath = }."
+    )
 
 
-                
-                
-                
-def extract_depth(filepath):
+def extract_depth(filepath: str, encoding: str = "windows-1252") -> str:
     """
     `extract_depth()` to find the depth information
-   
+
     filepath : filepath to a csv file, e.g. 'Data/<your_filename>.csv'
                 make sure file is in Laserscanner format
-                we perform a string match here, should make it more robust for different structures
+                we perform a string match here, should make
+                it more robust for different structures
     """
-    import csv
-
-    with open(filepath, mode="r") as f:
+    with open(filepath, mode="r", encoding=encoding) as f:
         reader = csv.reader(f)
-        for num, row in enumerate(reader):
-            if len(row) > 0:  # some rows are empty, which causes error
-                if "Dateiname:" in row[0]:  # get first element in row, first string
-                    age = row[0][25:28]  # extract age from that string
-                    return age
+        for row in reader:
+            if len(row) > 0 and "Dateiname:" in row[0]:
+                return row[0][25:28]
 
-def read_gs_to_df(filepath="Data/*.csv"):
+    raise RuntimeError(f"Failed to parse {filepath = }")
+
+
+def read_gs_to_df(filepath: str = "Data/*.csv") -> pd.DataFrame:
     """
     built a pandas dataframe based on csv input files
-    
+
     filepath : filepath to a csv file, e.g. 'Data/<your_filename>.csv'
                 make sure file is in Laserscanner format
     """
-    import numpy as np
-    import pandas as pd
-    import glob as glob
-
-    #################################################
-    ## step 1: DATA WRANGLING
     grainsizes = pd.DataFrame()
-    for filepath in glob.iglob(filepath):
-        depth = extract_depth(filepath)
+    for fp in glob.iglob(filepath):
+        depth = extract_depth(fp)
         interim = pd.read_csv(
-            filepath,
+            fp,
             encoding="ISO-8859-1",
-            skiprows=extract_row(filepath),
+            skiprows=extract_row(fp),
             sep="\t",
             header=[0, 1, 2],
         )
@@ -84,21 +84,14 @@ def read_gs_to_df(filepath="Data/*.csv"):
                 "Vol_" + depth + "_3_2",
                 "Vol_" + depth + "_3_3",
             ]
-        ## convert all exponential and comma values to something i can work with
         for i in interim.columns:
-            interim[i] = pd.to_numeric(
-                interim[i].str.replace(",", "."), errors="coerce"
-            ).astype(float)
-        ## delete NA rows, because NA values = PROBLEMS!
-        interim = interim.dropna(axis=0, how="all")  ## sometimes the first row is empty
-        interim.drop(interim.tail(1).index, inplace=True)  ##  2000 ist immer leer
+            interim[i] = pd.to_numeric(interim[i].str.replace(",", "."), errors="coerce").astype(
+                float
+            )
+        interim = interim.dropna(axis=0, how="all")
+        interim.drop(interim.tail(1).index, inplace=True)
         interim["depth"] = depth
-        ## use this to delete rows where all entries are zero
         interim = interim.loc[(interim.filter(regex=r"Vol_") != 0).all(axis=1)]
-
-        #################################################
-        ## DATA WRANGLING DONE
-        ## Step 2: CREATE NEW DF --> create new frame and keep the GS
 
         col_list = list(interim.columns[1:])
         interim_long = pd.melt(
@@ -114,30 +107,22 @@ def read_gs_to_df(filepath="Data/*.csv"):
     grainsizes["depth"] = grainsizes["depth"].astype("float")
     grainsizes["subsample"] = pd.to_numeric(grainsizes["subsample"])
     grainsizes["aliquot"] = pd.to_numeric(grainsizes["aliquot"])
+
     return grainsizes
 
-## cut off zeros at the edges
 
-
-def cut_off_zeros(dataframe):
+def cut_off_zeros(dataframe: pd.DataFrame) -> pd.DataFrame:
     """
     cut off zeros if they occurs in EVERY sample
     """
-    import numpy as np
-    import pandas as pd
-
-
     grainsizes_wide = dataframe.pivot(
         index=["depth", "variable", "subsample", "aliquot"],
         columns="Kanaldurchmesser_unten_um",
         values="Vol_%",
     ).reset_index()
-    ## delete all columns that are fully zero
     grainsizes_wide = grainsizes_wide.loc[:, (grainsizes_wide != 0).any(axis=0)]
-    ## delete 2000 if it is fully NAn --> here delete columns that are fully NAN
     grainsizes_wide = grainsizes_wide.dropna(axis=1, how="all")
 
-    ## transoform back to long
     grainsizes_long = pd.melt(
         grainsizes_wide,
         id_vars=["depth", "variable", "subsample", "aliquot"],
@@ -159,33 +144,25 @@ def cut_off_zeros(dataframe):
     return grainsizes_long
 
 
-def diameter_2_krumbein_phi(channelwidth, unit="um"):
+def diameter_2_krumbein_phi(channelwidth: pd.Series, unit: str = "um") -> np.ndarray:
     """
     convert grain-sizes diameter to phi scale
     input:
         unit = "um" (default) or "mm"
                 determines the conversion
-
     """
-    import numpy as np
-    
     if unit == "um":
-        gs_phi = -np.log2(channelwidth / 1000)
+        return -np.log2(channelwidth / 1000)
     if unit == "mm":
-        gs_phi = -np.log2(channelwidth / 1)
-    return gs_phi
+        return -np.log2(channelwidth / 1)
+
+    raise ValueError(f"Unknown value {unit = }")
 
 
-def gs_simplex_2_rplus(dataframe, depth_colum="depth"):
+def gs_simplex_2_rplus(dataframe: pd.DataFrame, depth_colum: str = "depth") -> pd.DataFrame:
     """
     perform clr on all aliquots
-
     """
-    import numpy as np
-    import pandas as pd
-    import composition_stats as comp
-    ## perform clr on all aliquots
-    Vol_perc_clr = []
     grainsizes_clr = pd.DataFrame()
 
     for depth in pd.unique(dataframe[depth_colum]):
@@ -194,13 +171,9 @@ def gs_simplex_2_rplus(dataframe, depth_colum="depth"):
             interim_sub = interim.loc[(interim["subsample"] == subsample)]
             for ali in [1, 2, 3]:
                 interim_ali = interim_sub.loc[(interim_sub["aliquot"] == ali)]
-                # perform clr
-                # interim_ali[interim_ali["Vol_perc_clr"]== comp.clr(comp.closure(comp.multiplicative_replacement(interim_ali["Vol_%"].values)))]
                 interim_ali = interim_ali.sort_values(by=["gs_phi"])
-                # convert NaN to 0
                 a = interim_ali.loc[:, "Vol_%"].values
                 a[np.isnan(a)] = 0
-                # perform clr
                 interim_ali.loc[:, "Vol_perc_clr"] = comp.clr(
                     comp.closure(comp.multiplicative_replacement(a))
                 )
@@ -209,58 +182,37 @@ def gs_simplex_2_rplus(dataframe, depth_colum="depth"):
     return grainsizes_clr
 
 
-## summarize the aliquots & the subsamples
-
-
-def mean_curves_clr(dataframe, depth_colum="depth"):
+def mean_curves_clr(dataframe: pd.DataFrame, depth_colum: str = "depth") -> pd.DataFrame:
     """
     summarize the aliquots & the subsamples into mean curves
- 
     """
-    import numpy as np
-    import pandas as pd
-    
     grainsizes_summarize = pd.DataFrame()
     interim_subset = pd.DataFrame()
 
     for depth in pd.unique(dataframe[depth_colum]):
-        interim = dataframe.loc[
-            (dataframe[depth_colum] == depth)
-        ]  # subset by sample depth (iterate over all)
-        interim_mean = []  # create empty list
-        interim_median = []  # create empty list
-        interim_std = []  # create empty list
+        interim = dataframe.loc[(dataframe[depth_colum] == depth)]
+        interim_mean = []
+        interim_median = []
+        interim_std = []
         channel_width = pd.unique(interim[["Kanaldurchmesser_unten_um"]].values.ravel())
         for c in channel_width:
-            mean = interim.loc[
-                interim["Kanaldurchmesser_unten_um"] == c, "Vol_perc_clr"
-            ].mean()
-            median = interim.loc[
-                interim["Kanaldurchmesser_unten_um"] == c, "Vol_perc_clr"
-            ].median()
-            std = interim.loc[
-                interim["Kanaldurchmesser_unten_um"] == c, "Vol_perc_clr"
-            ].std()
+            mean = interim.loc[interim["Kanaldurchmesser_unten_um"] == c, "Vol_perc_clr"].mean()
+            median = interim.loc[interim["Kanaldurchmesser_unten_um"] == c, "Vol_perc_clr"].median()
+            std = interim.loc[interim["Kanaldurchmesser_unten_um"] == c, "Vol_perc_clr"].std()
             interim_mean.append(mean)
             interim_median.append(median)
             interim_std.append(std)
-        interim_subset = interim.iloc[
-            0 : len(interim_mean)
-        ].copy()  # copy the whole dataframe (because everthing is the same get first 116 rows
-        # Vol_mean_cumsum =  np.cumsum(mean[::-1])[::-1]
-        interim_subset["Vol_clr_mean"] = interim_mean  # copy mean into new column
-        interim_subset["Vol_clr_median"] = interim_median  # copy mean into new column
-        interim_subset["Vol_clr_std"] = interim_std  # copy mean into new column
+        interim_subset = interim.iloc[0 : len(interim_mean)].copy()
+        interim_subset["Vol_clr_mean"] = interim_mean
+        interim_subset["Vol_clr_median"] = interim_median
+        interim_subset["Vol_clr_std"] = interim_std
         interim_subset = interim_subset.sort_values(by=["Kanaldurchmesser_unten_um"])
-        # # berechne cumulative sum aller Volumes
-        # interim_subset["Vol_clr_inv_mean"] = comp.clr_inv(interim_mean)
-        # interim_subset["Vol_clr_inv_mean_cumsum"] = comp.clr_inv(interim_mean)[::-1].cumsum()[::-1]
         grainsizes_summarize = pd.concat(
             [grainsizes_summarize, interim_subset], axis=0, ignore_index=True
-        )  # append
+        )
 
-    # drop columns that are no longer needed
     grainsizes_summarize = grainsizes_summarize.drop(
         ["subsample", "aliquot", "variable", "Vol_perc_clr"], axis=1
     )
+
     return grainsizes_summarize

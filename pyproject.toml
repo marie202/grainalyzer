@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "grainalyzer"
+version = "0.1.0"
+description = "grainalyzer provides a traceable pre-processing workflow for grain-size data analysis."
+authors = ["Marie Eckert <mceckert97@yahoo.de>"]
+maintainers = ["Marie Eckert <mceckert97@yahoo.de>"]
+license = "GPL-2.0-only"
+readme = "README.md"
+repository = "https://github.com/marie202/grainalyzer"
+homepage = "https://github.com/marie202/grainalyzer"
+packages = [ { include = "grainalyzer" } ]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = "^1.26.2"
+pandas = "^2.1.3"
+composition-stats = "^2.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
