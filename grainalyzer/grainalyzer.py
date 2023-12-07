@@ -5,7 +5,7 @@ import pandas as pd
 import composition_stats as comp
 
 
-def extract_row(filepath: str) -> int:
+def extract_row(filepath: str, encoding: str = "windows-1252") -> int:
     """
     `extract_row()` to find out how many rows to skip (we only want to keep
     the table given at the end of the csv)
@@ -15,18 +15,18 @@ def extract_row(filepath: str) -> int:
                 we perform a string match here, should make it more
                 robust for different structures
     """
-    with open(filepath, mode="r") as f:
+    with open(filepath, mode="r", encoding=encoding) as f:
         reader = csv.reader(f)
         for num, row in enumerate(reader):
             if len(row) > 0 and "Kanaldurchmesser" in row[0]:
                 return num - 1
 
     raise RuntimeError(
-        f"Failed to parse {filepath = } while computing number of rows to skip before reading"
+        f"Failed to parse {filepath = }."
     )
 
 
-def extract_depth(filepath: str) -> str:
+def extract_depth(filepath: str, encoding: str = "windows-1252") -> str:
     """
     `extract_depth()` to find the depth information
 
@@ -35,14 +35,13 @@ def extract_depth(filepath: str) -> str:
                 we perform a string match here, should make
                 it more robust for different structures
     """
-    with open(filepath, mode="r") as f:
+    with open(filepath, mode="r", encoding=encoding) as f:
         reader = csv.reader(f)
-        for _, row in enumerate(reader):
-            if len(row) > 0:  # some rows are empty, which causes error
-                if "Dateiname:" in row[0]:
-                    return row[0][25:28]
+        for row in reader:
+            if len(row) > 0 and "Dateiname:" in row[0]:
+                return row[0][25:28]
 
-    raise RuntimeError("Failed to parse {filepath = }")
+    raise RuntimeError(f"Failed to parse {filepath = }")
 
 
 def read_gs_to_df(filepath: str = "Data/*.csv") -> pd.DataFrame:
